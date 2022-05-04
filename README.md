@@ -27,13 +27,14 @@ responses:
       terminalBlockHash: "0x0000000000000000000000000000000000000000000000000000000000000000"
 ```
 
-Specifying which fields of requests and/or responses to engine API calls we want to modify.
+Specifying which fields of requests and/or responses to engine API calls we want to modify. **NOTE**: nested fields are not yet supported.
 
 **Flags**
 - --eth-rpc-endpoint string: execution client endpoint (default: "http://127.0.0.1:8545")
 - --host string: host for the HTTP proxy server (default: "127.0.0.1")
 - --port int: port for the HTTP proxy server (default: 8546)
 - --spoofing-config string: path to a YAML file containing a spoofing config
+- --jwt-secret string: path to file containing a JWT secret hex-string used for authentication via HTTP. WORK IN PROGRESS
 
 ## Developing
 
