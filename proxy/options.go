@@ -4,14 +4,13 @@ import (
 	"net/url"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type config struct {
 	proxyPort      int
 	proxyHost      string
+	spoofing       *SpoofingConfig
 	destinationUrl *url.URL
-	logger         *logrus.Logger
 }
 
 type Option func(p *Proxy) error
@@ -32,6 +31,14 @@ func WithPort(port int) Option {
 	}
 }
 
+// WithSpoofingConfig sets the proxy spoofing config.
+func WithSpootingConfig(c *SpoofingConfig) Option {
+	return func(p *Proxy) error {
+		p.cfg.spoofing = c
+		return nil
+	}
+}
+
 // WithDestinationAddress sets the forwarding address requests will be proxied to.
 func WithDestinationAddress(addr string) Option {
 	return func(p *Proxy) error {
@@ -43,14 +50,6 @@ func WithDestinationAddress(addr string) Option {
 			return errors.Wrapf(err, "could not parse URL for destination address: %s", addr)
 		}
 		p.cfg.destinationUrl = u
-		return nil
-	}
-}
-
-// WithLogger sets a custom logger for the proxy.
-func WithLogger(l *logrus.Logger) Option {
-	return func(p *Proxy) error {
-		p.cfg.logger = l
 		return nil
 	}
 }

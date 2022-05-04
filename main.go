@@ -31,6 +31,10 @@ var (
 		Name:  "jwt-secret",
 		Usage: "path to file containing a hex-string JWT secret for authenticating with an execution client via HTTP",
 	}
+	spoofingConfig = &cli.StringFlag{
+		Name:  "spoofing-config",
+		Usage: "path to YAML file containing a configuration for spoofing engine API requests. See README.md for details",
+	}
 )
 
 func main() {
@@ -38,7 +42,7 @@ func main() {
 	app.Name = "engine-proxy"
 	app.Usage = "runs a proxy server for testing the Ethereum engine API"
 	app.Version = "0.0.1"
-	app.Description = "Launches a proxy middleware server for engine API requests between Ethereum consensus and " +
+	app.Description = "Launches a proxy middleware server for spoofing engine API calls between Ethereum consensus and " +
 		"execution clients via JSON-RPC. Allows for customizing in-flight responses using custom triggers."
 	app.Authors = []*cli.Author{
 		{Name: "Raul Jordan", Email: "raul@prysmaticlabs.com"},
@@ -47,6 +51,8 @@ func main() {
 		endpointFlag,
 		hostFlag,
 		portFlag,
+		spoofingConfig,
+		jwtSecretFlag,
 	}
 	app.Copyright = "2022"
 	app.Action = runProxy
@@ -67,6 +73,9 @@ func runProxy(c *cli.Context) error {
 	host := c.String(hostFlag.Name)
 	port := c.Int(portFlag.Name)
 	destinationAddress := c.String(endpointFlag.Name)
+
+	// Parse the spoofing config yaml file.
+
 	srv, err := proxy.New(
 		proxy.WithHost(host),
 		proxy.WithPort(port),
