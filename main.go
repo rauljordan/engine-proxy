@@ -94,7 +94,12 @@ func runProxy(c *cli.Context) error {
 		return errors.Wrap(err, "failed to initialize proxy server")
 	}
 	if err = srv.Start(ctx); err != nil {
-		return errors.Wrap(err, "failed to start proxy server")
+		switch {
+		case errors.Is(err, context.Canceled):
+			return nil
+		default:
+			return errors.Wrap(err, "failed to start proxy server")
+		}
 	}
 	return nil
 }
