@@ -10,6 +10,7 @@ import (
 	"github.com/rauljordan/engine-proxy/proxy"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -73,14 +74,22 @@ func runProxy(c *cli.Context) error {
 	host := c.String(hostFlag.Name)
 	port := c.Int(portFlag.Name)
 	destinationAddress := c.String(endpointFlag.Name)
+	spoofingConfigPath := c.String(spoofingConfig.Name)
 
-	// Parse the spoofing config yaml file.
-
-	srv, err := proxy.New(
+	opts := []proxy.Option{
 		proxy.WithHost(host),
 		proxy.WithPort(port),
 		proxy.WithDestinationAddress(destinationAddress),
-	)
+	}
+	if spoofingConfigPath != "" {
+		cfg, err := parseSpoofingConfig(spoofingConfigPath)
+		if err != nil {
+			return errors.Wrap(err, "could not parse spoofing config yaml file")
+		}
+		opts = append(opts, proxy.WithSpootingConfig(cfg))
+	}
+
+	srv, err := proxy.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize proxy server")
 	}
@@ -88,4 +97,21 @@ func runProxy(c *cli.Context) error {
 		return errors.Wrap(err, "failed to start proxy server")
 	}
 	return nil
+}
+
+func parseSpoofingConfig(filePath string) (*proxy.SpoofingConfig, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = f.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	cfg := &proxy.SpoofingConfig{}
+	if err := yaml.NewDecoder(f).Decode(cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
