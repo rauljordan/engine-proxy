@@ -32,7 +32,7 @@ func WithPort(port int) Option {
 }
 
 // WithSpoofingConfig sets the proxy spoofing config.
-func WithSpootingConfig(c *SpoofingConfig) Option {
+func WithSpoofingConfig(c *SpoofingConfig) Option {
 	return func(p *Proxy) error {
 		p.cfg.spoofing = c
 		return nil
