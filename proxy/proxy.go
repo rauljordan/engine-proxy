@@ -69,7 +69,7 @@ func New(opts ...Option) (*Proxy, error) {
 		return nil, errors.New("must provide a destination address for request proxying")
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", p.proxyHandler(p.cfg.spoofing))
+	mux.Handle("/", p)
 	addr := fmt.Sprintf("%s:%d", p.cfg.proxyHost, p.cfg.proxyPort)
 	srv := &http.Server{
 		Handler: mux,
@@ -104,66 +104,79 @@ func (p *Proxy) Start(ctx context.Context) error {
 	}
 }
 
-// Proxy a request from an Ethereum consensus client to an execution client.
-func (p *Proxy) proxyHandler(config *SpoofingConfig) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		requestBytes, err := parseRequestBytes(r)
-		if err != nil {
-			logrus.WithError(err).Error("Could not parse request")
-			return
-		}
+// UpdateSpoofingConfig for use at runtime.
+func (p *Proxy) UpdateSpoofingConfig(config *SpoofingConfig) {
+	p.lock.Lock()
+	p.cfg.spoofing = config
+	p.lock.Unlock()
+}
 
-		modifiedReq, err := spoofRequest(config, requestBytes)
-		if err != nil {
-			logrus.WithError(err).Error("Failed to Spoof request")
-			return
-		}
-
-		// Create a new proxy request to the execution client.
-		url := r.URL
-		url.Host = p.cfg.destinationUrl.String()
-		proxyReq, err := http.NewRequest(r.Method, url.Host, r.Body)
-		if err != nil {
-			logrus.WithError(err).Error("Could create new request")
-			return
-		}
-
-		// Set the modified request as the proxy request body.
-		proxyReq.Body = ioutil.NopCloser(bytes.NewBuffer(modifiedReq))
-
-		// Required proxy headers for forwarding JSON-RPC requests to the execution client.
-		proxyReq.Header.Set("Host", r.Host)
-		proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
-		proxyReq.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{}
-		proxyRes, err := client.Do(proxyReq)
-		if err != nil {
-			logrus.WithError(err).Error("Could not do client proxy")
-			return
-		}
-
-		// We optionally Spoof the response as desired.
-		modifiedResp, err := spoofResponse(config, requestBytes, proxyRes.Body)
-		if err != nil {
-			logrus.WithError(err).Error("Failed to Spoof response")
-			return
-		}
-
-		if err = proxyRes.Body.Close(); err != nil {
-			logrus.WithError(err).Error("Could not do client proxy")
-			return
-		}
-
-		// Set the modified response as the proxy response body.
-		proxyRes.Body = ioutil.NopCloser(bytes.NewBuffer(modifiedResp))
-
-		// Pipe the proxy response to the original caller.
-		if _, err = io.Copy(w, proxyRes.Body); err != nil {
-			logrus.WithError(err).Error("Could not copy proxy request body")
-			return
-		}
+// ServeHTTP by proxying requests from an Ethereum consensus client to an execution client.
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	spoofing := p.spoofing()
+	requestBytes, err := parseRequestBytes(r)
+	if err != nil {
+		logrus.WithError(err).Error("Could not parse request")
+		return
 	}
+
+	modifiedReq, err := spoofRequest(spoofing, requestBytes)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to Spoof request")
+		return
+	}
+
+	// Create a new proxy request to the execution client.
+	url := r.URL
+	url.Host = p.cfg.destinationUrl.String()
+	proxyReq, err := http.NewRequest(r.Method, url.Host, r.Body)
+	if err != nil {
+		logrus.WithError(err).Error("Could create new request")
+		return
+	}
+
+	// Set the modified request as the proxy request body.
+	proxyReq.Body = ioutil.NopCloser(bytes.NewBuffer(modifiedReq))
+
+	// Required proxy headers for forwarding JSON-RPC requests to the execution client.
+	proxyReq.Header.Set("Host", r.Host)
+	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
+	proxyReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	proxyRes, err := client.Do(proxyReq)
+	if err != nil {
+		logrus.WithError(err).Error("Could not do client proxy")
+		return
+	}
+
+	// We optionally Spoof the response as desired.
+	modifiedResp, err := spoofResponse(spoofing, requestBytes, proxyRes.Body)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to Spoof response")
+		return
+	}
+
+	if err = proxyRes.Body.Close(); err != nil {
+		logrus.WithError(err).Error("Could not do client proxy")
+		return
+	}
+
+	// Set the modified response as the proxy response body.
+	proxyRes.Body = ioutil.NopCloser(bytes.NewBuffer(modifiedResp))
+
+	// Pipe the proxy response to the original caller.
+	if _, err = io.Copy(w, proxyRes.Body); err != nil {
+		logrus.WithError(err).Error("Could not copy proxy request body")
+		return
+	}
+}
+
+// Reads the spoofing config (thread-safe).
+func (p *Proxy) spoofing() *SpoofingConfig {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.cfg.spoofing
 }
 
 // Parses the request from thec consensus client and checks if user desires
