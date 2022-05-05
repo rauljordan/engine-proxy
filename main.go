@@ -86,7 +86,7 @@ func runProxy(c *cli.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "could not parse spoofing config yaml file")
 		}
-		opts = append(opts, proxy.WithSpootingConfig(cfg))
+		opts = append(opts, proxy.WithSpoofingConfig(cfg))
 	}
 
 	srv, err := proxy.New(opts...)
