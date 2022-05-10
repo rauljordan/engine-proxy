@@ -11,6 +11,7 @@ type config struct {
 	proxyHost      string
 	spoofing       *SpoofingConfig
 	destinationUrl *url.URL
+	jwtSecret      []byte
 }
 
 type Option func(p *Proxy) error
@@ -50,6 +51,14 @@ func WithDestinationAddress(addr string) Option {
 			return errors.Wrapf(err, "could not parse URL for destination address: %s", addr)
 		}
 		p.cfg.destinationUrl = u
+		return nil
+	}
+}
+
+// WithJWTSecret sets a JWT secret
+func WithJWTSecret(secret []byte) Option {
+	return func(p *Proxy) error {
+		p.cfg.jwtSecret = secret
 		return nil
 	}
 }

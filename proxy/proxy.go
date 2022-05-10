@@ -14,7 +14,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -142,6 +144,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyReq.Header.Set("Host", r.Host)
 	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
 	proxyReq.Header.Set("Content-Type", "application/json")
+
+	if len(p.cfg.jwtSecret) > 0 {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"iat": time.Now().Unix(),
+		})
+		tokenString, err := token.SignedString(p.cfg.jwtSecret)
+		if err != nil {
+			logrus.WithError(err).Error("Failed to create JWT token")
+		}
+		proxyReq.Header.Set("Authorization", "Bearer "+tokenString)
+	}
 
 	client := &http.Client{}
 	proxyRes, err := client.Do(proxyReq)
