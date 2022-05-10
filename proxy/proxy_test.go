@@ -103,7 +103,7 @@ func TestProxy_CustomInterceptors(t *testing.T) {
 		proxy, err := New(
 			WithPort(rand.Intn(50000)),
 			WithDestinationAddress(srv.URL),
-			WithSpootingConfig(&SpoofingConfig{
+			WithSpoofingConfig(&SpoofingConfig{
 				Responses: []*Spoof{
 					{
 						Method: "eth_syncing",
