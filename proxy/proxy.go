@@ -249,6 +249,8 @@ func spoofResponse(config *SpoofingConfig, requestBytes []byte, responseBody io.
 		switch {
 		case strings.Contains(err.Error(), "cannot unmarshal array"):
 			return responseBytes, nil
+		case strings.Contains(err.Error(), "invalid character"):
+			return nil, errors.New(string(responseBytes))
 		default:
 			return nil, err
 		}
@@ -258,6 +260,8 @@ func spoofResponse(config *SpoofingConfig, requestBytes []byte, responseBody io.
 		switch {
 		case strings.Contains(err.Error(), "cannot unmarshal array"):
 			return responseBytes, nil
+		case strings.Contains(err.Error(), "invalid character"):
+			return nil, errors.New(string(responseBytes))
 		default:
 			return nil, err
 		}
