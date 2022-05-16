@@ -41,6 +41,14 @@ func WithSpoofingConfig(c *SpoofingConfig) Option {
 	}
 }
 
+// WithSpoofingCallbacks sets the proxy spoofing callbacks.
+func WithSpoofingCallbacks(c *SpoofingCallbacks) Option {
+	return func(p *Proxy) error {
+		p.cfg.spoofCallbacks = c
+		return nil
+	}
+}
+
 // WithDestinationAddress sets the forwarding address requests will be proxied to.
 func WithDestinationAddress(addr string) Option {
 	return func(p *Proxy) error {
