@@ -1,17 +1,17 @@
 package proxy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/sirupsen/logrus"
+	logTest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,9 +23,8 @@ type ForkchoiceState struct {
 
 func TestProxy(t *testing.T) {
 	t.Run("fails to proxy if destination is down", func(t *testing.T) {
-		logger := logrus.New()
-		output := bytes.NewBuffer(make([]byte, 0))
-		logger.Out = output
+		hook := logTest.NewGlobal()
+		defer hook.Reset()
 		ctx := context.Background()
 		proxy, err := New(
 			WithPort(rand.Intn(10000)),
@@ -45,8 +44,16 @@ func TestProxy(t *testing.T) {
 		err = rpcClient.CallContext(ctx, nil, "someEngineMethod")
 		require.ErrorContains(t, err, "EOF")
 
+		require.Equal(t, true, len(hook.Entries) > 0)
+		var found bool
+		for _, entry := range hook.Entries {
+			if strings.Contains(entry.Message, "Could not do client proxy") {
+				found = true
+				break
+			}
+		}
 		// Expect issues when reaching destination server.
-		require.Contains(t, output.String(), "Could not forward request to destination server")
+		require.Equal(t, true, found)
 	})
 	t.Run("properly proxies request/response", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
