@@ -10,6 +10,7 @@ type config struct {
 	proxyPort      int
 	proxyHost      string
 	spoofing       *SpoofingConfig
+	spoofCallbacks *SpoofingCallbacks
 	destinationUrl *url.URL
 	jwtSecret      []byte
 }
