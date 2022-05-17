@@ -10,6 +10,7 @@ type config struct {
 	proxyPort      int
 	proxyHost      string
 	spoofing       *SpoofingConfig
+	spoofCallbacks *SpoofingCallbacks
 	destinationUrl *url.URL
 	jwtSecret      []byte
 }
@@ -36,6 +37,14 @@ func WithPort(port int) Option {
 func WithSpoofingConfig(c *SpoofingConfig) Option {
 	return func(p *Proxy) error {
 		p.cfg.spoofing = c
+		return nil
+	}
+}
+
+// WithSpoofingCallbacks sets the proxy spoofing callbacks.
+func WithSpoofingCallbacks(c *SpoofingCallbacks) Option {
+	return func(p *Proxy) error {
+		p.cfg.spoofCallbacks = c
 		return nil
 	}
 }

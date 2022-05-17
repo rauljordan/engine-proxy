@@ -31,6 +31,11 @@ type SpoofingConfig struct {
 	Responses []*Spoof `yaml:"responses"`
 }
 
+type SpoofingCallbacks struct {
+	RequestCallbacks  map[string]func([]byte) *Spoof
+	ResponseCallbacks map[string]func([]byte) *Spoof
+}
+
 type Spoof struct {
 	Method string                 `yaml:"method"`
 	Fields map[string]interface{} `yaml:"fields"`
@@ -57,9 +62,10 @@ type Proxy struct {
 func New(opts ...Option) (*Proxy, error) {
 	p := &Proxy{
 		cfg: &config{
-			proxyHost: defaultProxyHost,
-			proxyPort: defaultProxyPort,
-			spoofing:  &SpoofingConfig{},
+			proxyHost:      defaultProxyHost,
+			proxyPort:      defaultProxyPort,
+			spoofing:       &SpoofingConfig{},
+			spoofCallbacks: &SpoofingCallbacks{},
 		},
 	}
 	for _, o := range opts {
@@ -113,16 +119,24 @@ func (p *Proxy) UpdateSpoofingConfig(config *SpoofingConfig) {
 	p.lock.Unlock()
 }
 
+// UpdateSpoofingConfig for use at runtime.
+func (p *Proxy) UpdateSpoofingCallbacks(callbacks *SpoofingCallbacks) {
+	p.lock.Lock()
+	p.cfg.spoofCallbacks = callbacks
+	p.lock.Unlock()
+}
+
 // ServeHTTP by proxying requests from an Ethereum consensus client to an execution client.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	spoofing := p.spoofing()
+	spoofCallbacks := p.spoofingCallbacks()
 	requestBytes, err := parseRequestBytes(r)
 	if err != nil {
 		logrus.WithError(err).Error("Could not parse request")
 		return
 	}
 
-	modifiedReq, err := spoofRequest(spoofing, requestBytes)
+	modifiedReq, err := spoofRequest(spoofing, spoofCallbacks, requestBytes)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to Spoof request")
 		return
@@ -170,7 +184,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// We optionally Spoof the response as desired.
-	modifiedResp, err := spoofResponse(spoofing, requestBytes, proxyRes.Body)
+	modifiedResp, err := spoofResponse(spoofing, spoofCallbacks, requestBytes, proxyRes.Body)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to Spoof response")
 		return
@@ -198,10 +212,17 @@ func (p *Proxy) spoofing() *SpoofingConfig {
 	return p.cfg.spoofing
 }
 
+// Reads the spoofing config (thread-safe).
+func (p *Proxy) spoofingCallbacks() *SpoofingCallbacks {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.cfg.spoofCallbacks
+}
+
 // Parses the request from thec consensus client and checks if user desires
 // to Spoof it based on the JSON-RPC method. If so, it returns the modified
 // request bytes which will be proxied to the execution client.
-func spoofRequest(config *SpoofingConfig, requestBytes []byte) ([]byte, error) {
+func spoofRequest(config *SpoofingConfig, callbacks *SpoofingCallbacks, requestBytes []byte) ([]byte, error) {
 	// If the JSON request is not a JSON-RPC object, return the request as-is.
 	jsonRequest, err := unmarshalRPCObject(requestBytes)
 	if err != nil {
@@ -216,6 +237,14 @@ func spoofRequest(config *SpoofingConfig, requestBytes []byte) ([]byte, error) {
 		return requestBytes, nil
 	}
 	desiredMethodsToSpoof := make(map[string]*Spoof)
+	for method, spoofCallback := range callbacks.RequestCallbacks {
+		if method == jsonRequest.Method {
+			spoofReq := spoofCallback(requestBytes)
+			if spoofReq != nil {
+				desiredMethodsToSpoof[jsonRequest.Method] = spoofReq
+			}
+		}
+	}
 	for _, spoofReq := range config.Requests {
 		desiredMethodsToSpoof[spoofReq.Method] = spoofReq
 	}
@@ -244,7 +273,7 @@ func spoofRequest(config *SpoofingConfig, requestBytes []byte) ([]byte, error) {
 // Parses the response body from the execution client and checks if user desires
 // to Spoof it based on the JSON-RPC method. If so, it returns the modified
 // response bytes which will be proxied to the consensus client.
-func spoofResponse(config *SpoofingConfig, requestBytes []byte, responseBody io.Reader) ([]byte, error) {
+func spoofResponse(config *SpoofingConfig, callbacks *SpoofingCallbacks, requestBytes []byte, responseBody io.Reader) ([]byte, error) {
 	responseBytes, err := ioutil.ReadAll(responseBody)
 	if err != nil {
 		return nil, err
@@ -273,6 +302,14 @@ func spoofResponse(config *SpoofingConfig, requestBytes []byte, responseBody io.
 		}
 	}
 	desiredMethodsToSpoof := make(map[string]*Spoof)
+	for method, spoofCallback := range callbacks.ResponseCallbacks {
+		if method == jsonRequest.Method {
+			spoofReq := spoofCallback(responseBytes)
+			if spoofReq != nil {
+				desiredMethodsToSpoof[jsonRequest.Method] = spoofReq
+			}
+		}
+	}
 	for _, spoofReq := range config.Responses {
 		desiredMethodsToSpoof[spoofReq.Method] = spoofReq
 	}
