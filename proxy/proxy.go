@@ -162,6 +162,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logrus.WithError(err).Error("Could not do client proxy")
 		return
 	}
+	// Forward the headers from the destination response to our proxy response.
+	for k, vv := range proxyRes.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
 
 	// We optionally Spoof the response as desired.
 	modifiedResp, err := spoofResponse(spoofing, requestBytes, proxyRes.Body)

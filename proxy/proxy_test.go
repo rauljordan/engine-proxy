@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"math/rand"
@@ -22,6 +23,56 @@ type ForkchoiceState struct {
 }
 
 func TestProxy(t *testing.T) {
+	t.Run("forwards http headers from destination server", func(t *testing.T) {
+		ctx := context.Background()
+		customDestinationHeaders := map[string]string{
+			"hello": "world",
+		}
+		wantDestinationResponse := &ForkchoiceState{
+			HeadBlockHash:      []byte("foo"),
+			SafeBlockHash:      []byte("bar"),
+			FinalizedBlockHash: []byte("baz"),
+		}
+		srv := destinationServerSetup(t, wantDestinationResponse, customDestinationHeaders)
+		defer srv.Close()
+
+		proxy, err := New(
+			WithPort(rand.Intn(10000)),
+			WithDestinationAddress(srv.URL),
+		)
+		require.NoError(t, err)
+
+		go func() {
+			if err := proxy.Start(ctx); err != nil {
+				t.Log(err)
+			}
+		}()
+
+		time.Sleep(time.Millisecond * 100)
+
+		// If we make a request to the destination server directly, we should expect
+		// the right header in the HTTP response.
+		client := &http.Client{
+			Transport: http.DefaultTransport,
+		}
+		resp, err := client.Get(srv.URL)
+		require.NoError(t, err)
+		require.Equal(t, "world", resp.Header.Get("hello"))
+
+		// Making a request to the proxy should also forward the expected
+		// headers from the destination server.
+		buf := bytes.NewBuffer(make([]byte, 0))
+		req := &jsonRPCObject{
+			Jsonrpc: "2.0",
+			Method:  "engine_newPayloadV1",
+			Params:  nil,
+			ID:      1,
+		}
+		require.NoError(t, json.NewEncoder(buf).Encode(req))
+		resp, err = client.Post("http://"+proxy.Address(), "application/json", buf)
+		require.NoError(t, err)
+		require.Equal(t, "world", resp.Header.Get("hello"))
+	})
 	t.Run("fails to proxy if destination is down", func(t *testing.T) {
 		hook := logTest.NewGlobal()
 		defer hook.Reset()
@@ -64,7 +115,7 @@ func TestProxy(t *testing.T) {
 			SafeBlockHash:      []byte("bar"),
 			FinalizedBlockHash: []byte("baz"),
 		}
-		srv := destinationServerSetup(t, wantDestinationResponse)
+		srv := destinationServerSetup(t, wantDestinationResponse, nil)
 		defer srv.Close()
 
 		// Destination address server responds to JSON-RPC requests.
@@ -103,7 +154,7 @@ func TestProxy_CustomInterceptors(t *testing.T) {
 		}
 
 		wantDestinationResponse := &syncingResponse{Syncing: true}
-		srv := destinationServerSetup(t, wantDestinationResponse)
+		srv := destinationServerSetup(t, wantDestinationResponse, nil)
 		defer srv.Close()
 
 		// Destination address server responds to JSON-RPC requests.
@@ -142,9 +193,12 @@ func TestProxy_CustomInterceptors(t *testing.T) {
 	})
 }
 
-func destinationServerSetup(t *testing.T, response interface{}) *httptest.Server {
+func destinationServerSetup(t *testing.T, response interface{}, destinationServerHeaders map[string]string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		for hd, val := range destinationServerHeaders {
+			w.Header().Set(hd, val)
+		}
 		defer func() {
 			require.NoError(t, r.Body.Close())
 		}()
