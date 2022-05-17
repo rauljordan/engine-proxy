@@ -304,7 +304,7 @@ func spoofResponse(config *SpoofingConfig, callbacks *SpoofingCallbacks, request
 	desiredMethodsToSpoof := make(map[string]*Spoof)
 	for method, spoofCallback := range callbacks.ResponseCallbacks {
 		if method == jsonRequest.Method {
-			spoofReq := spoofCallback(requestBytes)
+			spoofReq := spoofCallback(responseBytes)
 			if spoofReq != nil {
 				desiredMethodsToSpoof[jsonRequest.Method] = spoofReq
 			}
