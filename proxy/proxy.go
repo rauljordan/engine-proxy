@@ -32,8 +32,11 @@ type SpoofingConfig struct {
 }
 
 type SpoofingCallbacks struct {
-	RequestCallbacks  map[string]func([]byte) *Spoof
-	ResponseCallbacks map[string]func([]byte) *Spoof
+	// Map of method names to callbacks, where the callback will receive the request bytes as only parameter
+	RequestCallbacks map[string]func([]byte) *Spoof
+	// Map of method names to callbacks, where the callback will receive the response bytes as 1st parameter,
+	// and original request bytes as 2nd parameter
+	ResponseCallbacks map[string]func([]byte, []byte) *Spoof
 }
 
 type Spoof struct {
@@ -304,7 +307,7 @@ func spoofResponse(config *SpoofingConfig, callbacks *SpoofingCallbacks, request
 	desiredMethodsToSpoof := make(map[string]*Spoof)
 	for method, spoofCallback := range callbacks.ResponseCallbacks {
 		if method == jsonRequest.Method {
-			spoofReq := spoofCallback(responseBytes)
+			spoofReq := spoofCallback(responseBytes, requestBytes)
 			if spoofReq != nil {
 				desiredMethodsToSpoof[jsonRequest.Method] = spoofReq
 			}
